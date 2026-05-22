@@ -2,11 +2,100 @@ import AppKit
 import AVFoundation
 
 @MainActor
-final class WallpaperWindowController: NSWindowController {
+final class WallpaperWindowController {
+    private let videoURL: URL
+    private var displayControllers: [CGDirectDisplayID: DisplayWallpaperWindowController] = [:]
+    private var screenObserver: NSObjectProtocol?
+    private var isPlaying = false
+
+    var displayMode: WallpaperDisplayMode {
+        didSet {
+            displayControllers.values.forEach { $0.displayMode = displayMode }
+        }
+    }
+
+    init(videoURL: URL, displayMode: WallpaperDisplayMode) throws {
+        self.videoURL = videoURL
+        self.displayMode = displayMode
+        try reloadScreens()
+        observeScreenChanges()
+    }
+
+    func showAndPlay() {
+        showAllWindows()
+        play()
+    }
+
+    func play() {
+        isPlaying = true
+        displayControllers.values.forEach { $0.play() }
+    }
+
+    func pause() {
+        isPlaying = false
+        displayControllers.values.forEach { $0.pause() }
+    }
+
+    func stop() {
+        isPlaying = false
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+            self.screenObserver = nil
+        }
+        displayControllers.values.forEach { $0.stop() }
+        displayControllers.removeAll()
+    }
+
+    private func reloadScreens() throws {
+        let screens = NSScreen.screens
+        let activeDisplayIDs = Set(screens.map(\.displayID))
+
+        for displayID in Array(displayControllers.keys) where !activeDisplayIDs.contains(displayID) {
+            displayControllers.removeValue(forKey: displayID)?.stop()
+        }
+
+        for screen in screens {
+            if let controller = displayControllers[screen.displayID] {
+                controller.relayout(to: screen)
+            } else {
+                let controller = try DisplayWallpaperWindowController(
+                    videoURL: videoURL,
+                    displayMode: displayMode,
+                    screen: screen
+                )
+                displayControllers[screen.displayID] = controller
+
+                if isPlaying {
+                    controller.showAndPlay()
+                }
+            }
+        }
+    }
+
+    private func showAllWindows() {
+        displayControllers.values.forEach { $0.showWindow() }
+    }
+
+    private func observeScreenChanges() {
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(200))
+                try? self?.reloadScreens()
+                self?.showAllWindows()
+            }
+        }
+    }
+}
+
+@MainActor
+private final class DisplayWallpaperWindowController: NSWindowController {
     private let playerView: PlayerView
     private let queuePlayer: AVQueuePlayer
     private var playerLooper: AVPlayerLooper?
-    private var screenObserver: NSObjectProtocol?
 
     var displayMode: WallpaperDisplayMode {
         didSet {
@@ -14,7 +103,7 @@ final class WallpaperWindowController: NSWindowController {
         }
     }
 
-    init(videoURL: URL, displayMode: WallpaperDisplayMode) throws {
+    init(videoURL: URL, displayMode: WallpaperDisplayMode, screen: NSScreen) throws {
         self.displayMode = displayMode
 
         let asset = AVURLAsset(url: videoURL)
@@ -26,9 +115,8 @@ final class WallpaperWindowController: NSWindowController {
 
         self.playerView = PlayerView(player: queuePlayer, videoGravity: displayMode.videoGravity)
 
-        let screenFrame = NSScreen.main?.frame ?? .zero
         let window = NSWindow(
-            contentRect: screenFrame,
+            contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -36,8 +124,7 @@ final class WallpaperWindowController: NSWindowController {
 
         super.init(window: window)
 
-        configureWindow(window, frame: screenFrame)
-        observeScreenChanges()
+        configureWindow(window, frame: screen.frame)
     }
 
     @available(*, unavailable)
@@ -46,9 +133,12 @@ final class WallpaperWindowController: NSWindowController {
     }
 
     func showAndPlay() {
-        guard let window else { return }
-        window.orderFrontRegardless()
+        showWindow()
         play()
+    }
+
+    func showWindow() {
+        window?.orderFrontRegardless()
     }
 
     func play() {
@@ -62,32 +152,14 @@ final class WallpaperWindowController: NSWindowController {
     func stop() {
         queuePlayer.pause()
         playerLooper = nil
-        if let screenObserver {
-            NotificationCenter.default.removeObserver(screenObserver)
-            self.screenObserver = nil
-        }
         window?.orderOut(nil)
         close()
     }
 
-    func relayoutToMainScreen() {
-        guard let screen = NSScreen.main, let window else { return }
+    func relayout(to screen: NSScreen) {
+        guard let window else { return }
         window.setFrame(screen.frame, display: true)
         playerView.frame = window.contentView?.bounds ?? .zero
-    }
-
-    private func observeScreenChanges() {
-        screenObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(200))
-                self?.relayoutToMainScreen()
-                self?.window?.orderFrontRegardless()
-            }
-        }
     }
 
     private func configureWindow(_ window: NSWindow, frame: NSRect) {
@@ -113,5 +185,19 @@ final class WallpaperWindowController: NSWindowController {
 
         let desktopLevel = Int(CGWindowLevelForKey(.desktopWindow))
         window.level = NSWindow.Level(rawValue: desktopLevel)
+    }
+}
+
+private extension NSScreen {
+    var displayID: CGDirectDisplayID {
+        if let displayID = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+            return displayID
+        }
+
+        if let displayID = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            return CGDirectDisplayID(displayID.uint32Value)
+        }
+
+        return 0
     }
 }

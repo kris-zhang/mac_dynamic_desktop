@@ -37,7 +37,7 @@ MacLiveWallpaper/
 ## Phase 1 Features
 
 - SwiftUI `MenuBarExtra` menu bar app.
-- AppKit borderless wallpaper window on the main display.
+- AppKit borderless wallpaper windows on all connected displays.
 - `AVQueuePlayer` + `AVPlayerLooper` loop playback.
 - MP4/MOV selection through `NSOpenPanel`.
 - Play, pause, stop, and quit menu actions.
