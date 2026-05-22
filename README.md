@@ -27,6 +27,8 @@ MacLiveWallpaper/
 │   └── Resources/
 │       ├── AppIcon.icns
 │       └── AppIcon-1024.png
+├── scripts/
+│   └── build_dist.sh
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -88,6 +90,18 @@ If `xcodebuild` is unavailable, a direct Swift compiler type check can still val
 ```sh
 xcrun swiftc -typecheck src/*.swift -target arm64-apple-macos14.0
 ```
+
+To generate release-ready local artifacts in `dist/`, run:
+
+```sh
+./scripts/build_dist.sh
+```
+
+The script creates:
+
+- `dist/MacLiveWallpaper.app`
+- `dist/MacLiveWallpaper.zip`
+- `dist/MacLiveWallpaper.dmg`
 
 ## Packaging
 
