@@ -6,6 +6,7 @@ final class WallpaperWindowController: NSWindowController {
     private let playerView: PlayerView
     private let queuePlayer: AVQueuePlayer
     private var playerLooper: AVPlayerLooper?
+    private var screenObserver: NSObjectProtocol?
 
     var displayMode: WallpaperDisplayMode {
         didSet {
@@ -36,6 +37,7 @@ final class WallpaperWindowController: NSWindowController {
         super.init(window: window)
 
         configureWindow(window, frame: screenFrame)
+        observeScreenChanges()
     }
 
     @available(*, unavailable)
@@ -60,6 +62,10 @@ final class WallpaperWindowController: NSWindowController {
     func stop() {
         queuePlayer.pause()
         playerLooper = nil
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+            self.screenObserver = nil
+        }
         window?.orderOut(nil)
         close()
     }
@@ -67,6 +73,21 @@ final class WallpaperWindowController: NSWindowController {
     func relayoutToMainScreen() {
         guard let screen = NSScreen.main, let window else { return }
         window.setFrame(screen.frame, display: true)
+        playerView.frame = window.contentView?.bounds ?? .zero
+    }
+
+    private func observeScreenChanges() {
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(200))
+                self?.relayoutToMainScreen()
+                self?.window?.orderFrontRegardless()
+            }
+        }
     }
 
     private func configureWindow(_ window: NSWindow, frame: NSRect) {
