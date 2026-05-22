@@ -6,9 +6,7 @@ This repository contains the Xcode project, Swift source, app resources, and MIT
 
 ## Preview
 
-![MacLiveWallpaper desktop preview](eg1.png)
-
-![MacLiveWallpaper alternate desktop preview](eg2.png)
+![MacLiveWallpaper live wallpaper demo](demo.webp)
 
 ## Project Structure
 
@@ -16,6 +14,7 @@ This repository contains the Xcode project, Swift source, app resources, and MIT
 MacLiveWallpaper/
 ├── MacLiveWallpaper.xcodeproj/
 │   └── project.pbxproj
+├── demo.webp
 ├── src/
 │   ├── MacLiveWallpaperApp.swift
 │   ├── AppDelegate.swift
@@ -29,8 +28,6 @@ MacLiveWallpaper/
 │       ├── AppIcon.icns
 │       └── AppIcon-1024.png
 ├── .gitignore
-├── eg1.png
-├── eg2.png
 ├── LICENSE
 └── README.md
 ```
